@@ -1,0 +1,14 @@
+# M6 demo only: represents non-sensitive configuration for a FUTURE database
+# (e.g. RDS/PostgreSQL) that user-service does not yet connect to.
+# Values are placeholders to demonstrate Kubernetes configuration management.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-db-config
+  namespace: devops-poc
+  labels:
+    app: user-service
+data:
+  DB_HOST: "demo-user-db.invalid"
+  DB_PORT: "5432"
+  DB_NAME: "users_db_demo"

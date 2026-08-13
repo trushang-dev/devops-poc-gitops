@@ -29,6 +29,31 @@ spec:
           env:
             - name: PORT
               value: "3003"
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: order-service-db-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: order-service-db-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: order-service-db-config
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: order-service-db-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: order-service-db-secret
+                  key: DB_PASSWORD
           readinessProbe:
             httpGet:
               path: /health
