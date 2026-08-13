@@ -1,0 +1,17 @@
+{{- range .Values.services }}
+# M6 demo only: represents non-sensitive configuration for a FUTURE database
+# (e.g. RDS/PostgreSQL) that {{ .name }} does not yet connect to.
+# Values are placeholders to demonstrate Kubernetes configuration management.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .name }}-db-config
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app: {{ .name }}
+data:
+  DB_HOST: {{ .db.host | quote }}
+  DB_PORT: {{ .db.port | quote }}
+  DB_NAME: {{ .db.name | quote }}
+---
+{{- end }}

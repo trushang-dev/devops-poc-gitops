@@ -1,0 +1,82 @@
+# M8: Helm packaging of the M4-M7 raw Kubernetes manifests.
+# These values reproduce the existing behavior exactly - see kubernetes/
+# for the original, still-present raw manifests this chart replaces live.
+
+namespace: devops-poc
+
+image:
+  repository: devops-poc
+  tag: "1.0.0"
+  pullPolicy: IfNotPresent
+
+rollingUpdate:
+  maxUnavailable: 1
+  maxSurge: 1
+
+probes:
+  path: /health
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 20
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Storage is intentionally omitted: no component in this project currently
+# requires persistent storage (no database is deployed or connected to yet).
+
+hpa:
+  minReplicas: 2
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+services:
+  - name: user-service
+    apiPath: users
+    port: 3001
+    replicas: 2
+    deploymentAnnotations:
+      kubernetes.io/change-cause: "M4: rolling update demo - add DEPLOY_NOTE env var"
+    extraEnv:
+      - name: DEPLOY_NOTE
+        value: "m4-rolling-update-demo"
+    db:
+      host: "demo-user-db.invalid"
+      port: "5432"
+      name: "users_db_demo"
+      user: "demo_user_service_user"
+      password: "demo-password-CHANGE-ME-not-real"
+
+  - name: product-service
+    apiPath: products
+    port: 3002
+    replicas: 2
+    deploymentAnnotations: {}
+    extraEnv: []
+    db:
+      host: "demo-product-db.invalid"
+      port: "5432"
+      name: "products_db_demo"
+      user: "demo_product_service_user"
+      password: "demo-password-CHANGE-ME-not-real"
+
+  - name: order-service
+    apiPath: orders
+    port: 3003
+    replicas: 2
+    deploymentAnnotations: {}
+    extraEnv: []
+    db:
+      host: "demo-order-db.invalid"
+      port: "5432"
+      name: "orders_db_demo"
+      user: "demo_order_service_user"
+      password: "demo-password-CHANGE-ME-not-real"
