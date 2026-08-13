@@ -11,7 +11,7 @@ spec:
   rules:
     - http:
         paths:
-          - path: /api/users(/|$)(.*)
+          - path: /api/users(?!/health(/|$))(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -32,7 +32,7 @@ spec:
   rules:
     - http:
         paths:
-          - path: /api/products(/|$)(.*)
+          - path: /api/products(?!/health(/|$))(/|$)(.*)
             pathType: ImplementationSpecific
             backend:
               service:
@@ -53,8 +53,68 @@ spec:
   rules:
     - http:
         paths:
-          - path: /api/orders(/|$)(.*)
+          - path: /api/orders(?!/health(/|$))(/|$)(.*)
             pathType: ImplementationSpecific
+            backend:
+              service:
+                name: order-service
+                port:
+                  number: 3003
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: user-service-health-ingress
+  namespace: devops-poc
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /health
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/users/health
+            pathType: Exact
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 3001
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: product-service-health-ingress
+  namespace: devops-poc
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /health
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/products/health
+            pathType: Exact
+            backend:
+              service:
+                name: product-service
+                port:
+                  number: 3002
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: order-service-health-ingress
+  namespace: devops-poc
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /health
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/orders/health
+            pathType: Exact
             backend:
               service:
                 name: order-service
