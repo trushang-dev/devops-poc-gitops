@@ -1,0 +1,71 @@
+# M14/M15: values override for the community chart
+# prometheus-community/kube-prometheus-stack, installed into the
+# devops-monitoring namespace. This chart is NOT authored by this
+# project (unlike helm/microservices in M8) - it is the real-world
+# standard "kube-prometheus-stack" bundle (Prometheus Operator +
+# Prometheus + Grafana + kube-state-metrics + node-exporter). This file
+# only records our deliberate overrides on top of the chart's own
+# defaults, so the desired configuration stays version-controlled.
+#
+# Alertmanager is intentionally disabled - no alerting requirement
+# exists in this project's scope; enabling it would add complexity
+# (routing/receiver config) with nothing to route to.
+
+alertmanager:
+  enabled: false
+
+prometheus:
+  prometheusSpec:
+    # Short local retention - this is a learning cluster, not a system of
+    # record. A real production Prometheus would set this much higher
+    # (days/weeks) or pair it with long-term remote-write storage.
+    retention: 6h
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 300m
+        memory: 512Mi
+    # By default, kube-prometheus-stack's Prometheus only watches
+    # ServiceMonitor/PodMonitor objects carrying a label matching its own
+    # Helm release name - meant to prevent one Prometheus instance from
+    # accidentally picking up unrelated ServiceMonitors in a shared
+    # cluster. Setting these to false makes it watch ServiceMonitors/
+    # PodMonitors in ANY namespace with ANY labels, which is what we want
+    # here: the OTel Collector's ServiceMonitor lives in the same
+    # devops-monitoring namespace but is not part of this chart's own
+    # release, so it would otherwise be silently ignored.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+grafana:
+  # Demo-only credential, same spirit as M6's Secret values - obviously
+  # not production secret management. A real deployment would inject
+  # this via a pre-existing Secret / external secret manager, never a
+  # plaintext Helm value.
+  adminPassword: "admin-demo-only-CHANGE-ME"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  service:
+    type: ClusterIP
+
+kubeStateMetrics:
+  enabled: true
+
+nodeExporter:
+  enabled: true

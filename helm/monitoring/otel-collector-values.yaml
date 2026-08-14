@@ -1,0 +1,76 @@
+# M14/M15: OpenTelemetry Collector, deployed as a metrics gateway between
+# the application services (devops-poc namespace) and Prometheus
+# (devops-monitoring namespace).
+#
+# The application is NOT instrumented with an OTel SDK - it only exposes
+# a plain Prometheus-format /metrics endpoint (see M14/M15 app change).
+# The Collector's "prometheus" receiver scrapes those endpoints (acting
+# like a mini-Prometheus itself), and its "prometheus" exporter re-exposes
+# the result on its own port for the real Prometheus to scrape. The
+# default "otlp" receiver is left enabled but unused for now - it's the
+# standard front door for future real OTel SDK instrumentation, not
+# removed just because nothing sends to it yet.
+
+mode: deployment
+
+replicaCount: 1
+
+# The "contrib" distribution is required: the prometheus receiver and
+# prometheus exporter used below are not part of the minimal "core"
+# OpenTelemetry Collector image, which is why the chart's image is
+# specified explicitly rather than left at the (unset) default.
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+ports:
+  # Collector's own self-telemetry (how healthy/busy the Collector itself is).
+  metrics:
+    enabled: true
+  # Where the "prometheus" exporter re-exposes the metrics it scraped from
+  # the application services - this is what Prometheus will scrape.
+  prom-export:
+    enabled: true
+    containerPort: 8889
+    servicePort: 8889
+    protocol: TCP
+
+config:
+  receivers:
+    prometheus:
+      config:
+        scrape_configs:
+          - job_name: devops-poc-services
+            scrape_interval: 15s
+            static_configs:
+              - targets:
+                  - user-service.devops-poc.svc.cluster.local:3001
+                  - product-service.devops-poc.svc.cluster.local:3002
+                  - order-service.devops-poc.svc.cluster.local:3003
+  exporters:
+    prometheus:
+      endpoint: ${env:MY_POD_IP}:8889
+  service:
+    pipelines:
+      metrics:
+        receivers: [otlp, prometheus]
+        # "debug" keeps scraped data visible in `kubectl logs` for quick
+        # verification/troubleshooting; "prometheus" is what actually
+        # serves the data onward.
+        exporters: [debug, prometheus]
+
+# Lets kube-prometheus-stack's Prometheus discover this Collector
+# automatically via the Prometheus Operator's ServiceMonitor CRD, instead
+# of hand-editing a scrape_config.
+serviceMonitor:
+  enabled: true
+  metricsEndpoints:
+    - port: metrics
+    - port: prom-export

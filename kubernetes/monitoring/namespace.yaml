@@ -1,0 +1,10 @@
+# M14/M15: dedicated namespace for observability workloads (Prometheus,
+# Grafana, OpenTelemetry Collector), kept separate from the application
+# namespace (devops-poc) so monitoring lifecycle/RBAC/resource quotas can
+# be managed independently of the services it observes.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devops-monitoring
+  labels:
+    purpose: observability
