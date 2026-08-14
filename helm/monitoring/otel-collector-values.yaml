@@ -1,15 +1,25 @@
-# M14/M15: OpenTelemetry Collector, deployed as a metrics gateway between
-# the application services (devops-poc namespace) and Prometheus
-# (devops-monitoring namespace).
+# M14/M15: OpenTelemetry Collector, deployed in the devops-monitoring
+# namespace as the front door for future OTel SDK instrumentation.
 #
-# The application is NOT instrumented with an OTel SDK - it only exposes
-# a plain Prometheus-format /metrics endpoint (see M14/M15 app change).
-# The Collector's "prometheus" receiver scrapes those endpoints (acting
-# like a mini-Prometheus itself), and its "prometheus" exporter re-exposes
-# the result on its own port for the real Prometheus to scrape. The
-# default "otlp" receiver is left enabled but unused for now - it's the
-# standard front door for future real OTel SDK instrumentation, not
-# removed just because nothing sends to it yet.
+# The application is NOT instrumented with an OTel SDK - it only exposes a
+# plain Prometheus-format /metrics endpoint, which Prometheus already
+# scrapes directly and correctly via a PodMonitor per service (see
+# helm/microservices/templates/podmonitor.yaml). The Collector previously
+# ALSO scraped those same /metrics endpoints via its own "prometheus"
+# receiver (scrape_configs below), which duplicated every application
+# metric under a second `job` label. Worse, that scrape targeted the
+# Service's DNS name rather than each Pod individually, so kube-proxy
+# load-balanced each 15s scrape to a random backend replica - since each
+# replica keeps its own independent in-memory counter, the resulting
+# series jumped between two unrelated counter values and badly distorted
+# rate()/increase() (confirmed live: ~120x the correct rate during an
+# audit). The fix is to stop the Collector from scraping application
+# metrics at all - PodMonitor is already the single, correct, per-pod path
+# to Prometheus for those. The "otlp" receiver is left enabled but unused
+# - it's the standard front door for future real OTel SDK instrumentation,
+# not removed just because nothing sends to it yet. The Collector itself
+# is kept running (not removed) so that upgrade path stays available and
+# its own self-telemetry (the "metrics" port) continues to be scraped.
 
 mode: deployment
 
@@ -34,8 +44,12 @@ ports:
   # Collector's own self-telemetry (how healthy/busy the Collector itself is).
   metrics:
     enabled: true
-  # Where the "prometheus" exporter re-exposes the metrics it scraped from
-  # the application services - this is what Prometheus will scrape.
+  # Where the "prometheus" exporter would re-expose metrics received via the
+  # "otlp" receiver, for Prometheus to scrape. Currently idle (nothing pushes
+  # to the otlp receiver yet) - left enabled so the port/ServiceMonitor
+  # wiring is already in place for when real OTel SDK instrumentation is
+  # added, rather than scraping application /metrics itself (see note above
+  # on why that path was removed).
   prom-export:
     enabled: true
     containerPort: 8889
@@ -43,27 +57,21 @@ ports:
     protocol: TCP
 
 config:
-  receivers:
-    prometheus:
-      config:
-        scrape_configs:
-          - job_name: devops-poc-services
-            scrape_interval: 15s
-            static_configs:
-              - targets:
-                  - user-service.devops-poc.svc.cluster.local:3001
-                  - product-service.devops-poc.svc.cluster.local:3002
-                  - order-service.devops-poc.svc.cluster.local:3003
+  # No "prometheus" receiver here anymore - it used to scrape the
+  # application services' /metrics endpoints directly (see note above for
+  # why that duplicated and distorted metrics already collected via
+  # PodMonitor). Only the default "otlp" receiver remains, unused until
+  # real OTel SDK push-based instrumentation exists.
   exporters:
     prometheus:
       endpoint: ${env:MY_POD_IP}:8889
   service:
     pipelines:
       metrics:
-        receivers: [otlp, prometheus]
-        # "debug" keeps scraped data visible in `kubectl logs` for quick
-        # verification/troubleshooting; "prometheus" is what actually
-        # serves the data onward.
+        receivers: [otlp]
+        # "debug" keeps received data visible in `kubectl logs` for quick
+        # verification/troubleshooting; "prometheus" is what would serve it
+        # onward to Prometheus once something sends data via otlp.
         exporters: [debug, prometheus]
 
 # Lets kube-prometheus-stack's Prometheus discover this Collector

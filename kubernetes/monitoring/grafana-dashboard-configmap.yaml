@@ -43,11 +43,12 @@ data:
           "fieldConfig": { "defaults": { "unit": "percent" } }
         },
         {
-          "id": 3, "type": "timeseries", "title": "Node disk usage - root fs (%)",
+          "id": 3, "type": "timeseries", "title": "Node disk usage - primary fs (%)",
           "gridPos": { "h": 7, "w": 6, "x": 12, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [ { "expr": "100 * (1 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}))", "legendFormat": "{{instance}}" } ],
-          "fieldConfig": { "defaults": { "unit": "percent" } }
+          "targets": [ { "expr": "100 * (1 - (node_filesystem_avail_bytes{mountpoint=\"/data\"} / node_filesystem_size_bytes{mountpoint=\"/data\"}))", "legendFormat": "{{instance}}" } ],
+          "fieldConfig": { "defaults": { "unit": "percent" } },
+          "description": "This Minikube node's node-exporter never reports a mountpoint literally equal to \"/\" - every mounted path (/data, /var, /tmp, /etc/hostname, etc.) is a bind mount of the same underlying device (/dev/sda2). \"/data\" is used here as the representative mountpoint for that device's overall usage."
         },
         {
           "id": 4, "type": "timeseries", "title": "Node network I/O (bytes/s)",
@@ -91,26 +92,61 @@ data:
           "fieldConfig": { "defaults": { "unit": "bytes" } }
         },
 
-        { "id": 102, "type": "row", "title": "Application level (via OTel Collector)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 } },
+        { "id": 102, "type": "row", "title": "Application level (via PodMonitor - one series per Pod)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 } },
         {
           "id": 9, "type": "timeseries", "title": "HTTP request rate by service",
           "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [ { "expr": "sum(rate(http_requests_total[5m])) by (exported_instance)", "legendFormat": "{{exported_instance}}" } ],
-          "fieldConfig": { "defaults": { "unit": "reqps" } }
+          "targets": [ { "expr": "sum(rate(http_requests_total{job=~\"devops-poc/.+\"}[5m])) by (job)", "legendFormat": "{{job}}" } ],
+          "fieldConfig": { "defaults": { "unit": "reqps" } },
+          "description": "Grouped by `job` (set by each service's PodMonitor to devops-poc/<service-name>) rather than the old `exported_instance` label, which only ever existed on the now-removed OTel Collector scrape path. The job=~\"devops-poc/.+\" filter restricts this to the canonical per-Pod PodMonitor series only."
         },
         {
           "id": 10, "type": "timeseries", "title": "HTTP requests by route and status code",
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [ { "expr": "sum(rate(http_requests_total[5m])) by (route, status_code)", "legendFormat": "{{route}} [{{status_code}}]" } ],
+          "targets": [ { "expr": "sum(rate(http_requests_total{job=~\"devops-poc/.+\"}[5m])) by (route, status_code)", "legendFormat": "{{route}} [{{status_code}}]" } ],
           "fieldConfig": { "defaults": { "unit": "reqps" } }
         },
         {
           "id": 11, "type": "stat", "title": "Total HTTP requests received (all time, this scrape session)",
           "gridPos": { "h": 4, "w": 24, "x": 0, "y": 25 },
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "targets": [ { "expr": "sum(http_requests_total)" } ]
+          "targets": [ { "expr": "sum(http_requests_total{job=~\"devops-poc/.+\"})" } ]
+        },
+
+        { "id": 103, "type": "row", "title": "Application level (latency & errors)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 } },
+        {
+          "id": 12, "type": "timeseries", "title": "HTTP request latency (p95)",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=~\"devops-poc/.+\"}[5m])) by (le, job))", "legendFormat": "{{job}}" } ],
+          "fieldConfig": { "defaults": { "unit": "s" } }
+        },
+        {
+          "id": 13, "type": "timeseries", "title": "HTTP error rate (4xx / 5xx)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            { "expr": "sum(rate(http_requests_total{job=~\"devops-poc/.+\", status_code=~\"4..\"}[5m])) by (job)", "legendFormat": "4xx {{job}}" },
+            { "expr": "sum(rate(http_requests_total{job=~\"devops-poc/.+\", status_code=~\"5..\"}[5m])) by (job)", "legendFormat": "5xx {{job}}" }
+          ],
+          "fieldConfig": { "defaults": { "unit": "reqps" } }
+        },
+
+        { "id": 104, "type": "row", "title": "Kubernetes health (restarts & readiness)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 38 } },
+        {
+          "id": 14, "type": "timeseries", "title": "Pod restarts (devops-poc)",
+          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 39 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "kube_pod_container_status_restarts_total{namespace=\"devops-poc\"}", "legendFormat": "{{pod}}" } ]
+        },
+        {
+          "id": 15, "type": "timeseries", "title": "Pod readiness (devops-poc)",
+          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 39 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "kube_pod_status_ready{namespace=\"devops-poc\", condition=\"true\"}", "legendFormat": "{{pod}}" } ],
+          "fieldConfig": { "defaults": { "min": 0, "max": 1 } }
         }
       ]
     }
