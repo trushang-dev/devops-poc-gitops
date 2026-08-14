@@ -1,0 +1,95 @@
+{
+  "title": "DevOps POC Overview",
+  "uid": "devops-poc-overview",
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "refresh": "15s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    { "id": 100, "type": "row", "title": "Node level (Node Exporter)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+    {
+      "id": 1, "type": "timeseries", "title": "Node CPU usage (%)",
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "legendFormat": "{{instance}}" } ],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "Node memory usage (%)",
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))", "legendFormat": "{{instance}}" } ],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Node disk usage - root fs (%)",
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "100 * (1 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}))", "legendFormat": "{{instance}}" } ],
+      "fieldConfig": { "defaults": { "unit": "percent" } }
+    },
+    {
+      "id": 4, "type": "timeseries", "title": "Node network I/O (bytes/s)",
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "rate(node_network_receive_bytes_total{device!=\"lo\"}[5m])", "legendFormat": "rx {{device}}" },
+        { "expr": "rate(node_network_transmit_bytes_total{device!=\"lo\"}[5m])", "legendFormat": "tx {{device}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps" } }
+    },
+
+    { "id": 101, "type": "row", "title": "Kubernetes level (kube-state-metrics + cAdvisor)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 } },
+    {
+      "id": 5, "type": "timeseries", "title": "Deployment replicas (devops-poc)",
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "kube_deployment_status_replicas{namespace=\"devops-poc\"}", "legendFormat": "{{deployment}}" } ]
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "HPA current vs max replicas",
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"devops-poc\"}", "legendFormat": "current {{horizontalpodautoscaler}}" },
+        { "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"devops-poc\"}", "legendFormat": "max {{horizontalpodautoscaler}}" }
+      ]
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "Pod CPU usage (devops-poc)",
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"devops-poc\"}[5m])) by (pod)", "legendFormat": "{{pod}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Pod memory usage (devops-poc)",
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "sum(container_memory_working_set_bytes{namespace=\"devops-poc\"}) by (pod)", "legendFormat": "{{pod}}" } ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+
+    { "id": 102, "type": "row", "title": "Application level (via OTel Collector)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 } },
+    {
+      "id": 9, "type": "timeseries", "title": "HTTP request rate by service",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "sum(rate(http_requests_total[5m])) by (exported_instance)", "legendFormat": "{{exported_instance}}" } ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 10, "type": "timeseries", "title": "HTTP requests by route and status code",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "sum(rate(http_requests_total[5m])) by (route, status_code)", "legendFormat": "{{route}} [{{status_code}}]" } ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 11, "type": "stat", "title": "Total HTTP requests received (all time, this scrape session)",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 25 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "sum(http_requests_total)" } ]
+    }
+  ]
+}

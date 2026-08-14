@@ -1,0 +1,34 @@
+# M12: one PodMonitor per service, so Prometheus scrapes each application
+# Pod directly (by its own Pod IP, discovered via the Kubernetes API)
+# instead of going through the Service's ClusterIP.
+#
+# WHY this matters: each service runs 2 replicas behind a Service. If
+# Prometheus (or anything else) scrapes the Service's DNS name/ClusterIP
+# instead of each Pod individually, kube-proxy load-balances every scrape
+# to a effectively-random backend Pod - and since each Pod keeps its own
+# independent in-memory prom-client counters, the resulting time series
+# jumps between two unrelated counters and can even appear to "go
+# backwards" (a real bug we hit and confirmed while building this
+# milestone: two order-service Pods reported 35 and 31 requests
+# respectively - scraping the Service alone cannot tell them apart).
+# PodMonitor is the Prometheus Operator's mechanism for scraping every
+# matching Pod as its own, stable target - this is the standard,
+# correct way to monitor a multi-replica Deployment.
+{{- range .Values.services }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app: {{ .name }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .name }}
+  podMetricsEndpoints:
+    - targetPort: {{ .port }}
+      path: /metrics
+      interval: 15s
+---
+{{- end }}
