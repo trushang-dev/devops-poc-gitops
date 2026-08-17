@@ -1,0 +1,52 @@
+# M13: Argo CD Application - the declarative link between this GitOps
+# repository and the running Minikube cluster. This is the only piece of
+# the M13 GitOps→Kubernetes flow that has to be applied by hand once
+# (kubectl apply -n argocd -f argocd/application.yaml) - after that,
+# Argo CD watches this repo/branch/path itself, so future changes to
+# helm/microservices only ever require a Git commit, never a manual
+# kubectl/helm command against the cluster.
+#
+# Ownership note: the devops-poc namespace's Deployments/Services were
+# previously managed by manual `helm upgrade devops-poc ...` runs (M8).
+# Once this Application syncs, Argo CD takes over management of those
+# same resources (matched by kind/namespace/name, not by which tool
+# created them) - manual `helm upgrade` against this release should not
+# be used anymore, or it will fight Argo CD's reconciliation.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devops-poc
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/trushang-dev/devops-poc-gitops.git
+    targetRevision: main
+    path: helm/microservices
+
+  destination:
+    # In-cluster (Argo CD's own cluster) - this project has exactly one
+    # Kubernetes cluster (local Minikube), so there is no separate
+    # "remote" destination to target.
+    server: https://kubernetes.default.svc
+    namespace: devops-poc
+
+  syncPolicy:
+    automated:
+      prune: true # remove resources Git no longer defines
+      selfHeal: true # revert manual/out-of-band cluster edits back to Git
+    syncOptions:
+      - CreateNamespace=false # the devops-poc namespace already exists and is created by this same chart's own template
+
+  # Each service's HPA (M7) actively manages Deployment.spec.replicas at
+  # runtime. Without this, Argo CD's selfHeal would treat the chart's
+  # static `replicas: 2` as the one true desired state and fight the HPA
+  # by reverting every scale-up on the next reconciliation - the same
+  # class of "who owns .spec.replicas" conflict already hit and solved
+  # for plain `helm upgrade` back in M8, now solved here for Argo CD.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
