@@ -29,7 +29,9 @@ spec:
     spec:
       containers:
         - name: {{ .name }}
-          image: "{{ $.Values.image.repository }}/{{ .name }}:{{ $.Values.image.tag }}"
+          # Renders trushangdev/devops-poc-<service>:<sha> - the exact
+          # repository/tag naming devops-poc-app's CI publishes to Docker Hub.
+          image: "{{ $.Values.image.repository }}/devops-poc-{{ .name }}:{{ $.Values.image.tag }}"
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .port }}

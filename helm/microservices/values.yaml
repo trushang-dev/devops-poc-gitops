@@ -4,9 +4,17 @@
 
 namespace: devops-poc
 
+# M10/M11: repository is the Docker Hub namespace CI publishes to
+# (trushangdev/devops-poc-<service>:<git-sha>, see devops-poc-app's
+# .github/workflows/ci.yml) - the deployment template prefixes each
+# service's image name with "devops-poc-" to match exactly. tag is the
+# immutable commit SHA of the devops-poc-app commit CI built and pushed;
+# it is bumped automatically by CI's update-gitops job once that job
+# exists (M11 prerequisite: devops-poc-gitops main must first contain
+# this chart - see PROJECT_SCOPE.md M10/M11 status).
 image:
-  repository: devops-poc
-  tag: "1.2.0"
+  repository: trushangdev
+  tag: "c9fe419991d0f086d925ce2911a79b23dc82ade6"
   pullPolicy: IfNotPresent
 
 rollingUpdate:
