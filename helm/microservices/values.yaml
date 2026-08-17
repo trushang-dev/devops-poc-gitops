@@ -3,7 +3,6 @@
 # for the original, still-present raw manifests this chart replaces live.
 
 namespace: devops-poc
-
 # M10/M11: repository is the Docker Hub namespace CI publishes to
 # (trushangdev/devops-poc-<service>:<git-sha>, see devops-poc-app's
 # .github/workflows/ci.yml) - the deployment template prefixes each
@@ -14,13 +13,11 @@ namespace: devops-poc
 # this chart - see PROJECT_SCOPE.md M10/M11 status).
 image:
   repository: trushangdev
-  tag: "c9fe419991d0f086d925ce2911a79b23dc82ade6"
+  tag: "9858175aee7f8a9469108bebdc0068b18bb259cd"
   pullPolicy: IfNotPresent
-
 rollingUpdate:
   maxUnavailable: 1
   maxSurge: 1
-
 probes:
   path: /health
   readiness:
@@ -29,7 +26,6 @@ probes:
   liveness:
     initialDelaySeconds: 15
     periodSeconds: 20
-
 resources:
   requests:
     cpu: 50m
@@ -37,15 +33,12 @@ resources:
   limits:
     cpu: 200m
     memory: 128Mi
-
 # Storage is intentionally omitted: no component in this project currently
 # requires persistent storage (no database is deployed or connected to yet).
-
 hpa:
   minReplicas: 2
   maxReplicas: 3
   targetCPUUtilizationPercentage: 70
-
 services:
   - name: user-service
     apiPath: users
@@ -62,7 +55,6 @@ services:
       name: "users_db_demo"
       user: "demo_user_service_user"
       password: "demo-password-CHANGE-ME-not-real"
-
   - name: product-service
     apiPath: products
     port: 3002
@@ -75,7 +67,6 @@ services:
       name: "products_db_demo"
       user: "demo_product_service_user"
       password: "demo-password-CHANGE-ME-not-real"
-
   - name: order-service
     apiPath: orders
     port: 3003
