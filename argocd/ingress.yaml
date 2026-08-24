@@ -1,0 +1,43 @@
+# Path-based Ingress exposing the Argo CD UI/API at
+# http://192.168.49.2/argocd, through the same shared NGINX Ingress
+# Controller the application API and observability stack already use.
+#
+# argocd-server normally serves HTTPS on :8080 and redirects any plain
+# HTTP request to https:// (confirmed live via curl before this change:
+# a 307 redirect to https://...). Since this POC has no TLS/cert-manager
+# in front of the Ingress, argocd-server is switched to --insecure mode
+# (server.insecure=true, set via the argocd-cmd-params-cm ConfigMap) so
+# it serves plain HTTP instead. server.rootpath=/argocd was also set and
+# confirmed working (argocd-server now 404s on plain "/", only responds
+# under /argocd), so this Ingress rule needs no rewrite-target.
+#
+# KNOWN LIMITATION (confirmed live, not fixed here - see task report):
+# server.basehref=/argocd does NOT patch the <base href="/"> tag in the
+# served index.html in this Argo CD version (v3.5.1) - verified directly
+# against argocd-server via both env var and CLI flag, bypassing this
+# Ingress entirely. As a result the UI's own JS/CSS bundle references
+# resolve to the wrong (root) path and 404 in a real browser, even though
+# the HTML shell itself loads (200) and API/CLI access is unaffected.
+# The standard workaround (an nginx sub_filter rewriting that one string)
+# is blocked by this cluster's ingress-nginx admission webhook ("Snippet
+# directives are disabled by the Ingress administrator") - enabling that
+# is a cluster-wide controller setting, not scoped to this Ingress alone,
+# so it was intentionally left for an explicit decision rather than
+# applied here.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-ingress
+  namespace: argocd
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /argocd
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80
