@@ -20,6 +20,14 @@ prometheus:
     # record. A real production Prometheus would set this much higher
     # (days/weeks) or pair it with long-term remote-write storage.
     retention: 6h
+    # Exposes Prometheus at http://192.168.49.2/prometheus via the shared
+    # NGINX Ingress (kubernetes/monitoring/ingress.yaml). routePrefix makes
+    # Prometheus itself serve every route (UI, API, static assets) under
+    # /prometheus, so the Ingress can forward the path through unchanged -
+    # no rewrite-target needed. externalUrl is used by Prometheus to build
+    # correct self-referencing links (e.g. in its own UI).
+    externalUrl: "http://192.168.49.2/prometheus"
+    routePrefix: /prometheus
     resources:
       requests:
         cpu: 100m
@@ -54,6 +62,16 @@ grafana:
   # this via a pre-existing Secret / external secret manager, never a
   # plaintext Helm value.
   adminPassword: "admin-demo-only-CHANGE-ME"
+  # Exposes Grafana at http://192.168.49.2/grafana via the shared NGINX
+  # Ingress (kubernetes/monitoring/ingress.yaml). serve_from_sub_path
+  # makes Grafana's own router and generated asset links expect the
+  # /grafana prefix, so the Ingress can forward the path through
+  # unchanged - no rewrite-target needed. root_url must match exactly
+  # what's typed in the browser for redirects/OAuth-style flows to work.
+  "grafana.ini":
+    server:
+      root_url: "http://192.168.49.2/grafana"
+      serve_from_sub_path: true
   resources:
     requests:
       cpu: 50m
