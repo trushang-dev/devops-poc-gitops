@@ -1,143 +1,83 @@
-# DevOps POC — GitOps
+# DevOps Microservices POC — GitOps
 
-This repository contains the Kubernetes desired state for the local DevOps Microservices POC.
+The Kubernetes desired state for the [`devops-poc-app`](https://github.com/trushang-dev/devops-poc-app) microservices: Helm charts, Argo CD configuration, and an observability stack, all deployed to a local Kubernetes cluster with Git as the single source of truth.
 
-## Responsibility
+![Architecture: CI/CD + GitOps + Kubernetes + Observability](docs/architecture.png)
 
-This repository contains:
-
-- Kubernetes configuration
-- Helm charts
-- Environment values
-- Argo CD configuration
-- Application image versions
-- GitOps deployment state
-
-Application source code belongs to `devops-poc-app`.
-
-## GitOps Flow
+## GitOps flow
 
 ```text
-Application Repository
-        ↓
-GitHub Actions
-        ↓
-Docker Hub
-        ↓
-GitOps Repository
-        ↓
-Argo CD
-        ↓
-Local Kubernetes
+devops-poc-app (CI)
+        │
+        ▼
+    Docker Hub
+        │
+        ▼
+devops-poc-gitops  ◀── this repository
+        │
+        ▼
+     Argo CD
+        │
+        ▼
+   Kubernetes (Minikube)
 ```
 
-Git is the source of truth for the desired Kubernetes state.
+Argo CD continuously compares the desired state declared in this Git repository against the actual state of the cluster and reconciles any difference — including reverting manual, out-of-band `kubectl` changes (`selfHeal`) and removing resources no longer defined in Git (`prune`).
 
-Argo CD compares:
+## What's deployed
 
-```text
-Git Desired State
-       vs
-Kubernetes Actual State
-```
+- **3 microservices** (user, product, order) — 2 replicas each, `HorizontalPodAutoscaler` on CPU, readiness/liveness probes, resource requests/limits, RollingUpdate
+- **NGINX Ingress** — path-based routing for the application API, Argo CD UI, and the monitoring stack behind a single external IP
+- **ConfigMap + Secret per service** — demo configuration for a future database integration (see [Configuration note](#configuration-note) below)
+- **Argo CD** — the `devops-poc` Application, self-healing and pruning, syncing `helm/microservices` from `main`
+- **Observability** — Prometheus, Grafana, and an OpenTelemetry Collector scraping/visualizing each service's `/metrics` endpoint and HTTP latency
 
-and reconciles differences.
-
-## Target Structure
+## Repository structure
 
 ```text
 devops-poc-gitops/
+├── kubernetes/          # raw manifests (M4–M7 historical reference)
+│   ├── user-service/  product-service/  order-service/
+│   └── monitoring/
 ├── helm/
-├── environments/
+│   ├── microservices/   # Chart.yaml, values.yaml, templates/ — the live-managed release
+│   └── monitoring/      # kube-prometheus-stack + OpenTelemetry Collector values
 ├── argocd/
-└── README.md
+│   ├── application.yaml # the Argo CD Application watching this repo
+│   └── ingress.yaml
+└── docs/                 # milestone-by-milestone build notes (M0–M15)
 ```
 
-The directories will be created progressively according to the project milestones.
+Helm (release name `devops-poc`) manages the live cluster resources; the raw `kubernetes/` manifests are kept as a historical reference from before Helm/Argo CD were introduced.
 
-## Kubernetes
+## Configuration note
 
-The final local environment will use `Minikube` and will manage:
+Each service ships a demo `ConfigMap`/`Secret` (`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`) representing configuration for a **future** database integration the application does not yet connect to. All values are explicitly fake (`.invalid` hostnames, `demo_...` usernames, `CHANGE-ME` passwords) and every manifest says so in a header comment. This exists purely to demonstrate Kubernetes configuration management — a Kubernetes `Secret` is base64-encoded, not encrypted, and should never hold real production credentials.
 
-- User Service
-- Product Service
-- Order Service
-- PostgreSQL
-- NGINX Ingress
-- ConfigMaps
-- Secrets
-- Persistent storage
-- Health checks
-- Scaling
+## Applying this to a cluster
 
-## Helm
+```bash
+# Argo CD Application — the one manual step; everything after this is Git-driven
+kubectl apply -n argocd -f argocd/application.yaml
 
-Helm will eventually package the application Kubernetes resources.
-
-Container image versions will be managed through Helm values.
-
-Example:
-
-```yaml
-userService:
-  image:
-    repository: docker.io/<username>/user-service
-    tag: v1.0.0
+# or, without Argo CD, drive the Helm release directly
+helm upgrade --install devops-poc helm/microservices -n devops-poc --create-namespace
 ```
 
-## Argo CD
+Once the Argo CD `Application` is applied, do not run `helm upgrade` against this release manually — Argo CD owns reconciliation and will fight (or be fought by) manual changes.
 
-Argo CD will:
+## Documentation
 
-- Watch the GitOps repository
-- Detect changes
-- Synchronize Kubernetes resources
-- Report application health
-- Detect configuration drift
+Detailed, milestone-by-milestone build notes — what was built, why, and what was verified live — are in [`docs/`](docs/), covering Git strategy, containerization, CI, Kubernetes fundamentals, Ingress, ConfigMaps/Secrets, HPA, Helm, GitOps, Docker Hub, observability, and Argo CD.
 
-## Important Rules
+## Rules this repo follows
 
-- Git is the source of truth.
-- Do not commit real secrets.
-- Use versioned image tags.
-- Avoid `latest` for deployment versions.
-- Do not use hardcoded pod IPs.
-- Do not bypass Argo CD for normal deployments.
-- Do not directly deploy with `kubectl` from CI.
-- Follow `../PROJECT_SCOPE.md`.
-- Follow `../CLAUDE OPERATING RULES.md`.
+- Git is the single source of truth for cluster state.
+- No real secrets are ever committed (see [Configuration note](#configuration-note)).
+- Images are deployed by versioned tag, never `latest`.
+- No hardcoded pod IPs.
+- Argo CD — not `kubectl` or CI — owns deployment to the cluster.
 
-## Deployment Example
+## License
 
-```text
-Application release:
-v1.2.0
-
-Docker image:
-user-service:v1.2.0
-
-GitOps change:
-tag: v1.2.0
-
-Argo CD:
-sync
-
-Kubernetes:
-user-service v1.2.0
-```
-
-## Repository Relationship
-
-```text
-devops-poc-app
-      ↓
-GitHub Actions
-      ↓
-Docker Hub
-      ↓
-devops-poc-gitops
-      ↓
-Argo CD
-      ↓
-Kubernetes
-```
+MIT — see [LICENSE](LICENSE).
