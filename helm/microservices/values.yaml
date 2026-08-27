@@ -13,7 +13,7 @@ namespace: devops-poc
 # this chart - see PROJECT_SCOPE.md M10/M11 status).
 image:
   repository: trushangdev
-  tag: "v1.0.0"
+  tag: "v1.0.1"
   pullPolicy: IfNotPresent
 rollingUpdate:
   maxUnavailable: 1
