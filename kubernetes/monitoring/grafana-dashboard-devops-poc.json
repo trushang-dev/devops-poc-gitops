@@ -126,6 +126,32 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [ { "expr": "kube_pod_status_ready{namespace=\"devops-poc\", condition=\"true\"}", "legendFormat": "{{pod}}" } ],
       "fieldConfig": { "defaults": { "min": 0, "max": 1 } }
+    },
+
+    { "id": 105, "type": "row", "title": "Application level (Node.js runtime internals)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 46 } },
+    {
+      "id": 16, "type": "timeseries", "title": "Event loop lag (p99)",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 47 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "nodejs_eventloop_lag_p99_seconds{job=~\"devops-poc/.+\"}", "legendFormat": "{{job}} {{pod}}" } ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "description": "How long the Node.js event loop is blocked before it can process the next tick - a direct signal of whether a service is struggling to keep up, independent of HTTP-level latency."
+    },
+    {
+      "id": 17, "type": "timeseries", "title": "Heap memory used",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 47 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "nodejs_heap_size_used_bytes{job=~\"devops-poc/.+\"}", "legendFormat": "{{job}} {{pod}}" } ],
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "description": "V8 heap usage per pod - a steady climb with no drops would indicate a memory leak, distinct from the pod's total container memory (which also includes non-heap process/OS overhead)."
+    },
+    {
+      "id": 18, "type": "timeseries", "title": "Garbage collection time",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 47 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "sum(rate(nodejs_gc_duration_seconds_sum{job=~\"devops-poc/.+\"}[5m])) by (job, kind)", "legendFormat": "{{job}} ({{kind}})" } ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "description": "Time spent in V8 garbage collection per second, split by GC kind (incremental/major/etc.) - sustained high values here are a common, otherwise-invisible cause of event-loop lag."
     }
   ]
 }
