@@ -1,0 +1,140 @@
+# Third dashboard-as-code, alongside "DevOps POC Overview"
+# (grafana-dashboard-configmap.yaml) and "Scalability & Status"
+# (grafana-dashboard-scalability-status-configmap.yaml) - same sidecar
+# discovery mechanism, deliberately narrower scope: application-layer
+# observability only (no node/cluster infrastructure panels - those
+# belong to the other two dashboards).
+#
+# Every metric here was verified live against Prometheus before being
+# used - no metric or label name was assumed. Queries deliberately avoid
+# hardcoding pod names/ReplicaSet hashes/image tags, so they keep working
+# across HPA scaling and rolling deployments without editing.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-application-overview
+  namespace: devops-monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  application-overview.json: |
+    {
+      "title": "DevOps POC - Application Overview",
+      "uid": "devops-poc-application-overview",
+      "timezone": "utc",
+      "schemaVersion": 39,
+      "refresh": "15s",
+      "time": { "from": "now-30m", "to": "now" },
+      "panels": [
+        { "id": 100, "type": "row", "title": "Service Health", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+        {
+          "id": 1, "type": "stat", "title": "User Service",
+          "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "min(up{job=\"devops-poc/user-service\"})" } ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ],
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] },
+              "noValue": "DOWN"
+            }
+          },
+          "description": "min() across both user-service pods - reports DOWN if even one instance isn't being scraped successfully by Prometheus, not just when all are down."
+        },
+        {
+          "id": 2, "type": "stat", "title": "Product Service",
+          "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "min(up{job=\"devops-poc/product-service\"})" } ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ],
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] },
+              "noValue": "DOWN"
+            }
+          },
+          "description": "min() across both product-service pods - reports DOWN if even one instance isn't being scraped successfully by Prometheus, not just when all are down."
+        },
+        {
+          "id": 3, "type": "stat", "title": "Order Service",
+          "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "min(up{job=\"devops-poc/order-service\"})" } ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ],
+              "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] },
+              "noValue": "DOWN"
+            }
+          },
+          "description": "min() across both order-service pods - reports DOWN if even one instance isn't being scraped successfully by Prometheus, not just when all are down."
+        },
+        {
+          "id": 4, "type": "stat", "title": "Total Application Instances",
+          "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "count(up{job=~\"devops-poc/.+\"} == 1)" } ],
+          "fieldConfig": { "defaults": { "unit": "short" } },
+          "description": "Count of individual application Pods currently being scraped successfully across all three services combined - naturally reflects HPA scaling up or down, no hardcoded expected count."
+        },
+
+        { "id": 101, "type": "row", "title": "Application Traffic", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 } },
+        {
+          "id": 5, "type": "timeseries", "title": "Request Rate by Service",
+          "gridPos": { "h": 8, "w": 16, "x": 0, "y": 7 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "sum(rate(http_requests_total{job=~\"devops-poc/.+\"}[5m])) by (job)", "legendFormat": "{{job}}" } ],
+          "fieldConfig": { "defaults": { "unit": "reqps" } },
+          "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last", "max"] } },
+          "description": "Per-second request rate, one series per service - http_requests_total is a Counter, so rate() (not the raw value) is the correct way to read it as traffic."
+        },
+        {
+          "id": 6, "type": "stat", "title": "Total Requests (selected time range)",
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 7 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "sum(increase(http_requests_total{job=~\"devops-poc/.+\"}[$__range]))" } ],
+          "fieldConfig": { "defaults": { "unit": "short" } },
+          "description": "increase() over $__range (the dashboard's own selected time window) - widening or narrowing the time picker at the top of the dashboard changes this number, unlike a raw counter sum which would just show an ever-growing since-scrape-start total regardless of the picker."
+        },
+
+        { "id": 102, "type": "row", "title": "Traffic Distribution", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 } },
+        {
+          "id": 7, "type": "bargauge", "title": "Requests by Service",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "sum(increase(http_requests_total{job=~\"devops-poc/.+\"}[$__range])) by (job)", "legendFormat": "{{job}}" } ],
+          "fieldConfig": { "defaults": { "unit": "short" } },
+          "description": "Same increase()/$__range query as the Total Requests stat, broken out per service for direct comparison."
+        },
+        {
+          "id": 8, "type": "piechart", "title": "Service Traffic Share",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "sum(increase(http_requests_total{job=~\"devops-poc/.+\"}[$__range])) by (job)", "legendFormat": "{{job}}" } ],
+          "options": { "legend": { "displayMode": "table", "placement": "right", "values": ["percent"] } },
+          "description": "Same request totals as a proportion of overall traffic - meaningful here because http_requests_total is directly comparable across all three services (same metric, same labels, no unit mismatch)."
+        },
+
+        { "id": 103, "type": "row", "title": "Application Reliability", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 24 } },
+        {
+          "id": 9, "type": "table", "title": "Pod Restarts",
+          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 25 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "kube_pod_container_status_restarts_total{namespace=\"devops-poc\"}", "format": "table", "instant": true } ],
+          "transformations": [ { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "container": true, "endpoint": true, "instance": true, "job": true, "namespace": true, "service": true, "uid": true }, "renameByName": { "pod": "Pod", "Value": "Restarts" } } } ],
+          "description": "Restart counts scoped to namespace=devops-poc only, which contains exclusively the three application services - Prometheus/Grafana/Argo CD run in separate namespaces and are never included here."
+        },
+        {
+          "id": 10, "type": "state-timeline", "title": "Service Availability",
+          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 25 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "expr": "up{job=~\"devops-poc/.+\"}", "legendFormat": "{{job}} - {{pod}}" } ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ]
+            }
+          },
+          "description": "Per-Pod up/down state over the selected time range, using Prometheus's own scrape-health signal (up) - one lane per Pod, so a restart or rollout is directly visible as a state change."
+        }
+      ]
+    }
