@@ -1,0 +1,61 @@
+{
+  "title": "Scalability & Status",
+  "uid": "devops-poc-scalability-status",
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "refresh": "15s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    { "id": 100, "type": "row", "title": "Scalability (HPA)", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+    {
+      "id": 1, "type": "timeseries", "title": "HPA replicas: current vs min vs max",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"devops-poc\"}", "legendFormat": "current {{horizontalpodautoscaler}}" },
+        { "expr": "kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"devops-poc\"}", "legendFormat": "min {{horizontalpodautoscaler}}" },
+        { "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"devops-poc\"}", "legendFormat": "max {{horizontalpodautoscaler}}" }
+      ],
+      "description": "Whether the HPA is actively scaling within its configured bounds - current should move between min and max, never outside them."
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "Pod CPU usage (drives HPA scaling decisions)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"devops-poc\"}[5m])) by (pod)", "legendFormat": "{{pod}}" } ],
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "description": "The HPA target is 70% of each container's CPU request (50m) - sustained CPU here is what actually triggers a scale-up, visible directly alongside the replica count panel."
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Deployment replicas: desired vs available",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "kube_deployment_spec_replicas{namespace=\"devops-poc\"}", "legendFormat": "desired {{deployment}}" },
+        { "expr": "kube_deployment_status_replicas_available{namespace=\"devops-poc\"}", "legendFormat": "available {{deployment}}" }
+      ],
+      "description": "Desired and available should track each other closely - a sustained gap means new replicas exist but aren't passing readiness yet."
+    },
+
+    { "id": 101, "type": "row", "title": "Status", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 } },
+    {
+      "id": 4, "type": "stat", "title": "Running pods (devops-poc)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "count(kube_pod_status_phase{namespace=\"devops-poc\", phase=\"Running\"})" } ]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Pod readiness",
+      "gridPos": { "h": 8, "w": 9, "x": 6, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "kube_pod_status_ready{namespace=\"devops-poc\", condition=\"true\"}", "legendFormat": "{{pod}}" } ],
+      "fieldConfig": { "defaults": { "min": 0, "max": 1 } }
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Pod restarts",
+      "gridPos": { "h": 8, "w": 9, "x": 15, "y": 10 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "kube_pod_container_status_restarts_total{namespace=\"devops-poc\"}", "legendFormat": "{{pod}}" } ]
+    }
+  ]
+}
