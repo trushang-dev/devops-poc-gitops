@@ -127,7 +127,7 @@ Git (devops-poc-gitops@main)  ← desired state
 
 Argo CD's `devops-poc` Application runs with `syncPolicy.automated: {prune: true, selfHeal: true}`, with one deliberate exception: `ignoreDifferences` excludes `Deployment.spec.replicas`, so the HPA can scale without Argo CD reverting it back to the chart's static replica count on the next reconciliation.
 
-**Drift detection and self-healing — real, measured evidence (not inferred from the config alone):** an out-of-band `kubectl set env` change to `user-service` was detected by the Argo CD controller (`Synced -> OutOfSync`, logged with a timestamp) and automatically reverted (`OutOfSync -> Synced`) **4 seconds later**, confirmed independently via a new `ReplicaSet` appearing and being scaled back to zero. No manual remediation was involved. This was one measured occurrence, not a claim about worst-case or guaranteed timing — see `M13_COMPLETION_REPORT.md` for the full log trail.
+**Drift detection and self-healing — real, measured evidence (not inferred from the config alone):** an out-of-band `kubectl set env` change to `user-service` was detected by the Argo CD controller (`Synced -> OutOfSync`, logged with a timestamp) and automatically reverted (`OutOfSync -> Synced`) **4 seconds later**, confirmed independently via a new `ReplicaSet` appearing and being scaled back to zero. No manual remediation was involved. This was one measured occurrence, not a claim about worst-case or guaranteed timing — the full controller log trail was captured in this project's internal M13 completion notes (kept outside this public repository).
 
 **Git-based rollback — also directly verified:** a real image-tag change was merged to `main` via a normal feature-branch/PR flow and deployed automatically; a `git revert` (not `reset`, not a manual `kubectl` command) on a second PR then triggered Argo CD to automatically restore the prior state. Both transitions were confirmed via controller logs and live pod images, not assumed from `selfHeal: true`.
 
@@ -187,7 +187,7 @@ Deployed in its own `devops-monitoring` namespace via the community `kube-promet
 - **Kubernetes object-state metrics** (deployment replicas, HPA state, pod restarts/readiness) — `kube-state-metrics` and cAdvisor/kubelet.
 - **Application metrics** — each service's `/metrics` is scraped by a dedicated per-service `PodMonitor`, not a `ServiceMonitor`. This was a deliberate fix: scraping the Service's `ClusterIP` let `kube-proxy` load-balance each 15-second scrape across both replicas, producing a non-monotonic counter (a real bug caught while building this — two `order-service` pods once reported 35 and 31 requests respectively from a single "counter"). Scraping each Pod directly by IP resolves this.
 - **OpenTelemetry Collector** — deployed as a forward-looking OTLP gateway. It previously *also* scraped application `/metrics` directly, which duplicated every metric under a second `job` label and badly distorted rate calculations (confirmed ~120× the correct rate during an audit); that scrape config has been removed. The Collector's `otlp` receiver remains configured but **currently receives nothing** — the application is instrumented with `prom-client` (Prometheus format), not an OTel SDK, so there is no active OTel data path today.
-- **Grafana** — a single "DevOps POC Overview" dashboard, provisioned as code (a labeled ConfigMap plus the chart's dashboard sidecar, no manual import), with 15 panels across four rows: node metrics, Kubernetes object metrics, per-service request rate/route/status, and p95 latency + error rate + restarts + readiness.
+- **Grafana** — the "DevOps POC Overview" dashboard, provisioned as code (a labeled ConfigMap plus the chart's dashboard sidecar, no manual import): 18 panels across six rows — node metrics, Kubernetes object metrics, per-service request rate/route/status, p95 latency + error rate, pod restarts/readiness, and Node.js runtime internals (event loop lag, heap memory, GC time).
 
 Verified end-to-end with a real `ab -n 10000 -c 20` run against `user-service`: 0 failed requests, the request counter increased by exactly 10,000, the latency histogram recorded real values, and the HPA scaled `user-service` 2→3 while `product-service`/`order-service` correctly stayed at 2/2.
 
@@ -215,7 +215,7 @@ Authoritative status per `PROJECT_SCOPE.md` §20. See [PROJECT_JOURNEY.md](PROJE
 | M15 | Grafana | ✅ Completed (delivered under M12) |
 | M16 | Deployment Strategy (rolling update + K8s-native rollback) | ✅ Completed |
 | M17 | Failure Testing | ✅ Completed |
-| M18 | End-to-End DevSecOps (one continuous run) | ⬜ Not started |
+| M18 | End-to-End DevSecOps (one continuous run) | ✅ Completed |
 | M19 | Documentation | ⬜ Not started (this document set addresses part of it) |
 
 ## How to Run
@@ -254,7 +254,19 @@ kubectl get application devops-poc -n argocd
 curl http://$(minikube ip)/api/users/health
 ```
 
-A more complete command-by-command checklist (Argo CD, Helm, Trivy, observability) is not duplicated here — ask if you'd like it published alongside this doc set.
+A more complete, scenario-by-scenario command reference (starting the environment, verifying every layer, both rollback paths, drift/self-healing, failure testing, shutdown/cleanup) lives in [docs/RUNBOOK.md](docs/RUNBOOK.md) — not duplicated here.
+
+## Documentation
+
+| Document | Answers |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | How is this actually built, and which component handles which failure? |
+| [PROJECT_JOURNEY.md](PROJECT_JOURNEY.md) | How was this built, milestone by milestone — including what went wrong? |
+| [docs/RUNBOOK.md](docs/RUNBOOK.md) | How do I start, operate, deploy to, and shut down this environment? |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Something's broken — how do I find out why? |
+| [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) | How does metrics collection actually work, end to end? |
+| [docs/SECURITY.md](docs/SECURITY.md) | What's actually implemented vs. what a production deployment would still need? |
+| [docs/](docs/) (`M0`–`M17`) | Milestone-by-milestone build notes from when each piece was first implemented |
 
 ## Key Learnings
 
